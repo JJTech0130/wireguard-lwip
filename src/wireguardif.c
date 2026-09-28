@@ -725,6 +725,7 @@ static err_t wireguardif_lookup_peer(struct netif *netif, u8_t peer_index, struc
 }
 
 err_t wireguardif_connect(struct netif *netif, u8_t peer_index) {
+	struct wireguard_device *device = (struct wireguard_device *)netif->state;
 	struct wireguard_peer *peer;
 	err_t result = wireguardif_lookup_peer(netif, peer_index, &peer);
 	if (result == ERR_OK) {
@@ -734,6 +735,11 @@ err_t wireguardif_connect(struct netif *netif, u8_t peer_index) {
 			peer->active = true;
 			peer->ip = peer->connect_ip;
 			peer->port = peer->connect_port;
+			result = ERR_OK;
+		} else if (device->transport_output_fn) {
+			// A caller-supplied transport may address peers by public key, in
+			// which case a peer is reachable with no IP endpoint at all.
+			peer->active = true;
 			result = ERR_OK;
 		} else {
 			result = ERR_ARG;
