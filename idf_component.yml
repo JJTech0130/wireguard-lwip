@@ -1,0 +1,9 @@
+version: "0.1.0"
+description: >
+  WireGuard for lwIP: a small, malloc-free implementation of the WireGuard
+  protocol (Noise IK, ChaCha20-Poly1305, BLAKE2s, Curve25519) with an lwIP
+  network interface.
+url: https://github.com/smartalock/wireguard-lwip
+dependencies:
+  idf:
+    version: ">=5.0"
