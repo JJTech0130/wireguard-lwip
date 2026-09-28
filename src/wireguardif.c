@@ -48,7 +48,6 @@
 #include "wireguard.h"
 #include "crypto.h"
 
-#include <stdio.h> // TODO: Remove
 
 #define WIREGUARDIF_TIMER_MSECS 400
 
@@ -855,8 +854,8 @@ err_t wireguardif_add_peer(struct netif *netif, struct wireguardif_peer *p, u8_t
 		result = ERR_ARG;
 	}
 
-	uint32_t t2 = wireguard_sys_now();
-	printf("Adding peer took %ldms\r\n", (t2-t1));
+	LWIP_DEBUGF(WIREGUARDIF_DEBUG, ("wireguardif_add_peer: took %"U32_F"ms\n",
+	                                wireguard_sys_now() - t1));
 
 	if (peer_index) {
 		if (peer) {
@@ -1001,8 +1000,8 @@ err_t wireguardif_init(struct netif *netif) {
 						// Per-wireguard netif/device setup
 						uint32_t t1 = wireguard_sys_now();
 						if (wireguard_device_init(device, private_key)) {
-							uint32_t t2 = wireguard_sys_now();
-							printf("Device init took %ldms\r\n", (t2-t1));
+							LWIP_DEBUGF(WIREGUARDIF_DEBUG, ("wireguardif_init: device init took %"U32_F"ms\n",
+							                                wireguard_sys_now() - t1));
 
 #if LWIP_CHECKSUM_CTRL_PER_NETIF
 							NETIF_SET_CHECKSUM_CTRL(netif, NETIF_CHECKSUM_ENABLE_ALL);

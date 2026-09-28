@@ -42,6 +42,12 @@
 // stored in
 #include "wireguard.h"
 
+/* Debug level for this module, in the usual lwIP style: set it to LWIP_DBG_ON in
+ * lwipopts.h to trace interface and peer setup. */
+#ifndef WIREGUARDIF_DEBUG
+#define WIREGUARDIF_DEBUG               LWIP_DBG_OFF
+#endif
+
 // Default MTU for WireGuard is 1420 bytes
 #define WIREGUARDIF_MTU (1420)
 
