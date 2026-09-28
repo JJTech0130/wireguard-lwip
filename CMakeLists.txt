@@ -1,34 +1,40 @@
 # ESP-IDF component packaging for wireguard-lwip.
 #
-# The library is platform-agnostic and expects the integrator to supply the
-# functions declared at the bottom of src/wireguard-platform.h:
+# The library itself is platform-agnostic and expects the integrator to supply
+# the functions declared at the bottom of src/wireguard-platform.h. An ESP-IDF
+# implementation ships in port/esp-idf and is built by default, because defining
+# those symbols in the consuming component instead means fighting the linker's
+# archive ordering: this library needs them, and its archive is searched after
+# the component that requires it.
 #
-#   uint32_t wireguard_sys_now(void);
-#   void     wireguard_random_bytes(void *bytes, size_t size);
-#   void     wireguard_tai64n_now(uint8_t *output);
-#   bool     wireguard_is_under_load(void);
-#
-# See example/wireguard-platform.c for a reference implementation. Those symbols
-# are resolved at link time from the component that depends on this one, so this
-# component intentionally does not provide them.
+# Set WIREGUARD_LWIP_OWN_PLATFORM to provide your own instead.
 #
 # The static limits in src/wireguard-platform.h can be set from the build, e.g.
 #   target_compile_definitions(... PUBLIC WIREGUARD_MAX_PEERS=16)
+set(srcs
+    "src/wireguard.c"
+    "src/wireguardif.c"
+    "src/crypto.c"
+    "src/crypto/refc/blake2s.c"
+    "src/crypto/refc/chacha20.c"
+    "src/crypto/refc/chacha20poly1305.c"
+    "src/crypto/refc/poly1305-donna.c"
+    "src/crypto/refc/x25519.c"
+)
+
+if(NOT WIREGUARD_LWIP_OWN_PLATFORM)
+    list(APPEND srcs "port/esp-idf/wireguard-platform-esp-idf.c")
+endif()
+
 idf_component_register(
-    SRCS
-        "src/wireguard.c"
-        "src/wireguardif.c"
-        "src/crypto.c"
-        "src/crypto/refc/blake2s.c"
-        "src/crypto/refc/chacha20.c"
-        "src/crypto/refc/chacha20poly1305.c"
-        "src/crypto/refc/poly1305-donna.c"
-        "src/crypto/refc/x25519.c"
+    SRCS ${srcs}
     INCLUDE_DIRS
         "src"
         "src/crypto/refc"
     REQUIRES
         lwip
+        esp_timer
+        esp_hw_support
 )
 
 target_compile_definitions(${COMPONENT_LIB} PRIVATE
