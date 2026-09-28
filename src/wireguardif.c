@@ -421,20 +421,21 @@ static size_t get_source_addr_port(const ip_addr_t *addr, u16_t port, uint8_t *b
 
 #if LWIP_IPV4
 	if (IP_IS_V4(addr) && (buflen >= 4)) {
-		U32TO8_BIG(buf + result, PP_NTOHL(ip4_addr_get_u32(addr)));
+		U32TO8_BIG(buf + result, PP_NTOHL(ip4_addr_get_u32(ip_2_ip4(addr))));
 		result += 4;
 	}
 #endif
 #if LWIP_IPV6
-	if (IP_IS_V4(addr) && (buflen >= 16)) {
-		U16TO8_BIG(buf + result + 0, IP6_ADDR_BLOCK1(addr));
-		U16TO8_BIG(buf + result + 2, IP6_ADDR_BLOCK2(addr));
-		U16TO8_BIG(buf + result + 4, IP6_ADDR_BLOCK3(addr));
-		U16TO8_BIG(buf + result + 6, IP6_ADDR_BLOCK4(addr));
-		U16TO8_BIG(buf + result + 8, IP6_ADDR_BLOCK5(addr));
-		U16TO8_BIG(buf + result + 10, IP6_ADDR_BLOCK6(addr));
-		U16TO8_BIG(buf + result + 12, IP6_ADDR_BLOCK7(addr));
-		U16TO8_BIG(buf + result + 14, IP6_ADDR_BLOCK8(addr));
+	if (IP_IS_V6(addr) && (buflen >= 16)) {
+		const ip6_addr_t *ip6 = ip_2_ip6(addr);
+		U16TO8_BIG(buf + result + 0, IP6_ADDR_BLOCK1(ip6));
+		U16TO8_BIG(buf + result + 2, IP6_ADDR_BLOCK2(ip6));
+		U16TO8_BIG(buf + result + 4, IP6_ADDR_BLOCK3(ip6));
+		U16TO8_BIG(buf + result + 6, IP6_ADDR_BLOCK4(ip6));
+		U16TO8_BIG(buf + result + 8, IP6_ADDR_BLOCK5(ip6));
+		U16TO8_BIG(buf + result + 10, IP6_ADDR_BLOCK6(ip6));
+		U16TO8_BIG(buf + result + 12, IP6_ADDR_BLOCK7(ip6));
+		U16TO8_BIG(buf + result + 14, IP6_ADDR_BLOCK8(ip6));
 		result += 16;
 	}
 #endif
