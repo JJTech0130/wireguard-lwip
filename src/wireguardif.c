@@ -116,10 +116,18 @@ static err_t wireguardif_peer_output(struct netif *netif, struct pbuf *q, struct
 	struct wireguard_device *device = (struct wireguard_device *)netif->state;
 	// Send to last know port, not the connect port
 	//TODO: Support DSCP and ECN - lwip requires this set on PCB globally, not per packet
+	if (device->transport_output_fn) {
+		return device->transport_output_fn(q, peer->public_key, &peer->ip, peer->port, device->transport_output_ctx);
+	}
 	return udp_sendto(device->udp_pcb, q, &peer->ip, peer->port);
 }
 
 static err_t wireguardif_device_output(struct wireguard_device *device, struct pbuf *q, const ip_addr_t *ipaddr, u16_t port) {
+	if (device->transport_output_fn) {
+		// No peer is associated with this packet, so the transport has only the
+		// address and port to go on
+		return device->transport_output_fn(q, NULL, ipaddr, port, device->transport_output_ctx);
+	}
 	return udp_sendto(device->udp_pcb, q, ipaddr, port);
 }
 
@@ -1039,6 +1047,15 @@ err_t wireguardif_init(struct netif *netif) {
 		result = ERR_ARG;
 	}
 	return result;
+}
+
+void wireguardif_set_transport_output(struct netif *netif, wireguardif_transport_output_fn output_fn, void *ctx) {
+	struct wireguard_device *device;
+	LWIP_ASSERT("netif != NULL", (netif != NULL));
+	LWIP_ASSERT("netif->state != NULL", (netif->state != NULL));
+	device = (struct wireguard_device *)netif->state;
+	device->transport_output_fn = output_fn;
+	device->transport_output_ctx = ctx;
 }
 
 void wireguardif_peer_init(struct wireguardif_peer *peer) {

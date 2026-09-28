@@ -167,10 +167,31 @@ struct wireguard_peer {
 	bool send_handshake;
 };
 
+// Optional replacement for the outer UDP transport.
+//
+// When set, the interface calls this instead of udp_sendto() to transmit an
+// encrypted WireGuard packet, so that the outer transport can be something other
+// than a UDP socket -- a relay connection, a tunnel, a link that is not IP at
+// all. The pbuf is not freed by the callee, exactly as with udp_sendto().
+//
+// peer_public_key identifies the destination peer, or is NULL for a packet that
+// belongs to no known peer yet (a cookie reply), in which case addr and port are
+// the only information about where it should go. addr may be an "any" address
+// when the peer has no known endpoint, which is the normal case when the
+// transport addresses peers by key rather than by address.
+//
+// Inbound packets are handed back in through wireguardif_network_rx(), passing
+// netif->state as its arg and NULL for the pcb.
+typedef err_t (*wireguardif_transport_output_fn)(struct pbuf *q, const uint8_t *peer_public_key, const ip_addr_t *addr, u16_t port, void *ctx);
+
 struct wireguard_device {
 	// Maybe have a "Device private" member to abstract these?
 	struct netif *netif;
 	struct udp_pcb *udp_pcb;
+
+	// If set, used in place of udp_pcb for sending - see above
+	wireguardif_transport_output_fn transport_output_fn;
+	void *transport_output_ctx;
 
 	uint8_t public_key[WIREGUARD_PUBLIC_KEY_LEN];
 	uint8_t private_key[WIREGUARD_PRIVATE_KEY_LEN];

@@ -38,6 +38,10 @@
 #include "lwip/netif.h"
 #include "lwip/ip_addr.h"
 
+// For wireguardif_transport_output_fn, declared next to the device state it is
+// stored in
+#include "wireguard.h"
+
 // Default MTU for WireGuard is 1420 bytes
 #define WIREGUARDIF_MTU (1420)
 
@@ -107,6 +111,10 @@ struct wireguardif_peer {
 err_t wireguardif_init(struct netif *netif);
 
 // Helper to initialise the peer struct with defaults
+// Supply an outer transport to use instead of the UDP socket. Pass NULL to go
+// back to the socket. See wireguardif_transport_output_fn in wireguard.h.
+void wireguardif_set_transport_output(struct netif *netif, wireguardif_transport_output_fn output_fn, void *ctx);
+
 void wireguardif_peer_init(struct wireguardif_peer *peer);
 
 // Add a new peer to the specified interface - see wireguard.h for maximum number of peers allowed
