@@ -37,6 +37,9 @@
 
 #include "lwip/netif.h"
 #include "lwip/ip.h"
+#if LWIP_IPV6
+#include "lwip/prot/ip6.h"
+#endif /* LWIP_IPV6 */
 #include "lwip/udp.h"
 #include "lwip/mem.h"
 #include "lwip/sys.h"
@@ -234,6 +237,24 @@ static err_t wireguardif_output(struct netif *netif, struct pbuf *q, const ip4_a
 }
 #endif /* LWIP_IPV4 */
 
+#if LWIP_IPV6
+// The IPv6 counterpart of wireguardif_output. lwIP calls this one through
+// netif->output_ip6, which takes an ip6_addr_t rather than an ip4_addr_t.
+static err_t wireguardif_output_ip6(struct netif *netif, struct pbuf *q, const ip6_addr_t *ipaddr) {
+	struct wireguard_device *device = (struct wireguard_device *)netif->state;
+	ip_addr_t dest;
+	struct wireguard_peer *peer;
+	ip_addr_copy_from_ip6(dest, *ipaddr);
+	// Send to peer that matches dest IP
+	peer = peer_lookup_by_allowed_ip(device, &dest);
+	if (peer) {
+		return wireguardif_output_to_peer(netif, q, &dest, peer);
+	} else {
+		return ERR_RTE;
+	}
+}
+#endif /* LWIP_IPV6 */
+
 static void wireguardif_send_keepalive(struct wireguard_device *device, struct wireguard_peer *peer) {
 	// Send a NULL packet as a keep-alive
 	wireguardif_output_to_peer(device->netif, NULL, NULL, peer);
@@ -361,9 +382,20 @@ static void wireguardif_process_data_message(struct wireguard_device *device, st
 #endif /* LWIP_IPV4 */
 #if LWIP_IPV6
 							if (IPH_V(iphdr) == 6) {
-								// TODO: IPV6 support for route filtering
-								header_len = PP_NTOHS(IPH_LEN(iphdr));
-								src_ok = true;
+								const struct ip6_hdr *ip6hdr = (const struct ip6_hdr *)pbuf->payload;
+								ip_addr_copy_from_ip6_packed(src_ip, ip6hdr->src);
+								for (x=0; x < WIREGUARD_MAX_SRC_IPS; x++) {
+									if (peer->allowed_source_ips[x].valid) {
+										if (wireguardif_addr_in_network(&src_ip, &peer->allowed_source_ips[x].ip, &peer->allowed_source_ips[x].mask)) {
+											src_ok = true;
+											// IPv6 carries the payload length, excluding the fixed
+											// header. Note IP6H_PLEN already converts to host order,
+											// unlike IPH_LEN above, so it must not be swapped again.
+											header_len = IP6_HLEN + IP6H_PLEN(ip6hdr);
+											break;
+										}
+									}
+								}
 							}
 #endif /* LWIP_IPV6 */
 							if (header_len <= pbuf->tot_len) {
@@ -967,6 +999,9 @@ err_t wireguardif_init(struct netif *netif) {
 #if LWIP_IPV4
 							netif->output = wireguardif_output;
 #endif /* LWIP_IPV4 */
+#if LWIP_IPV6
+							netif->output_ip6 = wireguardif_output_ip6;
+#endif /* LWIP_IPV6 */
 							netif->linkoutput = NULL;
 							netif->hwaddr_len = 0;
 							netif->mtu = WIREGUARDIF_MTU;
