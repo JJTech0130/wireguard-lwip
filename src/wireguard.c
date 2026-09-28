@@ -42,12 +42,26 @@
 // For HMAC calculation
 #define WIREGUARD_BLAKE2S_BLOCK_SIZE (64)
 
+// These are fixed-length protocol constants, not C strings: the initialisers
+// exactly fill the arrays and the NUL terminator is deliberately dropped. GCC 15
+// and recent Clang warn about that by default
+// (-Wunterminated-string-initialization), and some build systems promote it to
+// an error, so say explicitly that these are not strings.
+#if defined(__has_attribute)
+#if __has_attribute(nonstring)
+#define WG_NONSTRING __attribute__((nonstring))
+#endif
+#endif
+#ifndef WG_NONSTRING
+#define WG_NONSTRING
+#endif
+
 // 5.4 Messages
 // Constants
-static const uint8_t CONSTRUCTION[37] = "Noise_IKpsk2_25519_ChaChaPoly_BLAKE2s"; // The UTF-8 string literal "Noise_IKpsk2_25519_ChaChaPoly_BLAKE2s", 37 bytes of output
-static const uint8_t IDENTIFIER[34] = "WireGuard v1 zx2c4 Jason@zx2c4.com"; // The UTF-8 string literal "WireGuard v1 zx2c4 Jason@zx2c4.com", 34 bytes of output
-static const uint8_t LABEL_MAC1[8] = "mac1----"; // Label-Mac1 The UTF-8 string literal "mac1----", 8 bytes of output.
-static const uint8_t LABEL_COOKIE[8] = "cookie--"; // Label-Cookie The UTF-8 string literal "cookie--", 8 bytes of output
+static const uint8_t CONSTRUCTION[37] WG_NONSTRING = "Noise_IKpsk2_25519_ChaChaPoly_BLAKE2s"; // The UTF-8 string literal "Noise_IKpsk2_25519_ChaChaPoly_BLAKE2s", 37 bytes of output
+static const uint8_t IDENTIFIER[34] WG_NONSTRING = "WireGuard v1 zx2c4 Jason@zx2c4.com"; // The UTF-8 string literal "WireGuard v1 zx2c4 Jason@zx2c4.com", 34 bytes of output
+static const uint8_t LABEL_MAC1[8] WG_NONSTRING = "mac1----"; // Label-Mac1 The UTF-8 string literal "mac1----", 8 bytes of output.
+static const uint8_t LABEL_COOKIE[8] WG_NONSTRING = "cookie--"; // Label-Cookie The UTF-8 string literal "cookie--", 8 bytes of output
 
 static const char *base64_lookup = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
