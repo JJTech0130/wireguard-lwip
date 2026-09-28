@@ -55,7 +55,38 @@ static void update_peer_addr(struct wireguard_peer *peer, const ip_addr_t *addr,
 	peer->port = port;
 }
 
-static struct wireguard_peer *peer_lookup_by_allowed_ip(struct wireguard_device *device, const ip4_addr_t *ipaddr) {
+// Is addr inside the network described by net and mask?
+//
+// lwIP's ip_addr_netcmp() cannot be used for this. On a dual-stack build it
+// takes an ip4_addr_t mask, and ip_addr_net_eq() short-circuits to 0 whenever
+// both addresses are IPv6, so an IPv6 allowed-IP could never match.
+static bool wireguardif_addr_in_network(const ip_addr_t *addr, const ip_addr_t *net, const ip_addr_t *mask) {
+	if (IP_GET_TYPE(addr) != IP_GET_TYPE(net)) {
+		return false;
+	}
+#if LWIP_IPV6
+	if (IP_IS_V6(addr)) {
+		const ip6_addr_t *a = ip_2_ip6(addr);
+		const ip6_addr_t *n = ip_2_ip6(net);
+		const ip6_addr_t *m = ip_2_ip6(mask);
+		int i;
+		for (i = 0; i < 4; i++) {
+			if ((a->addr[i] & m->addr[i]) != (n->addr[i] & m->addr[i])) {
+				return false;
+			}
+		}
+		return true;
+	}
+#endif /* LWIP_IPV6 */
+#if LWIP_IPV4
+	if (IP_IS_V4(addr)) {
+		return ip4_addr_net_eq(ip_2_ip4(addr), ip_2_ip4(net), ip_2_ip4(mask)) != 0;
+	}
+#endif /* LWIP_IPV4 */
+	return false;
+}
+
+static struct wireguard_peer *peer_lookup_by_allowed_ip(struct wireguard_device *device, const ip_addr_t *ipaddr) {
 	struct wireguard_peer *result = NULL;
 	struct wireguard_peer *tmp;
 	int x;
@@ -64,7 +95,7 @@ static struct wireguard_peer *peer_lookup_by_allowed_ip(struct wireguard_device 
 		tmp = &device->peers[x];
 		if (tmp->valid) {
 			for (y=0; y < WIREGUARD_MAX_SRC_IPS; y++) {
-				if ((tmp->allowed_source_ips[y].valid) && ip_addr_netcmp(ipaddr, &tmp->allowed_source_ips[y].ip, &tmp->allowed_source_ips[y].mask)) {
+				if ((tmp->allowed_source_ips[y].valid) && wireguardif_addr_in_network(ipaddr, &tmp->allowed_source_ips[y].ip, &tmp->allowed_source_ips[y].mask)) {
 					result = tmp;
 					break;
 				}
@@ -85,11 +116,11 @@ static err_t wireguardif_peer_output(struct netif *netif, struct pbuf *q, struct
 	return udp_sendto(device->udp_pcb, q, &peer->ip, peer->port);
 }
 
-static err_t wireguardif_device_output(struct wireguard_device *device, struct pbuf *q, const ip4_addr_t *ipaddr, u16_t port) {
+static err_t wireguardif_device_output(struct wireguard_device *device, struct pbuf *q, const ip_addr_t *ipaddr, u16_t port) {
 	return udp_sendto(device->udp_pcb, q, ipaddr, port);
 }
 
-static err_t wireguardif_output_to_peer(struct netif *netif, struct pbuf *q, const ip4_addr_t *ipaddr, struct wireguard_peer *peer) {
+static err_t wireguardif_output_to_peer(struct netif *netif, struct pbuf *q, const ip_addr_t *ipaddr, struct wireguard_peer *peer) {
 	// The LWIP IP layer wants to send an IP packet out over the interface - we need to encrypt and send it to the peer
 	struct message_transport_data *hdr;
 	struct pbuf *pbuf;
@@ -187,16 +218,21 @@ static err_t wireguardif_output_to_peer(struct netif *netif, struct pbuf *q, con
 
 // This is used as the output function for the Wireguard netif
 // The ipaddr here is the one inside the VPN which we use to lookup the correct peer/endpoint
+#if LWIP_IPV4
 static err_t wireguardif_output(struct netif *netif, struct pbuf *q, const ip4_addr_t *ipaddr) {
 	struct wireguard_device *device = (struct wireguard_device *)netif->state;
+	ip_addr_t dest;
+	struct wireguard_peer *peer;
+	ip_addr_copy_from_ip4(dest, *ipaddr);
 	// Send to peer that matches dest IP
-	struct wireguard_peer *peer = peer_lookup_by_allowed_ip(device, ipaddr);
+	peer = peer_lookup_by_allowed_ip(device, &dest);
 	if (peer) {
-		return wireguardif_output_to_peer(netif, q, ipaddr, peer);
+		return wireguardif_output_to_peer(netif, q, &dest, peer);
 	} else {
 		return ERR_RTE;
 	}
 }
+#endif /* LWIP_IPV4 */
 
 static void wireguardif_send_keepalive(struct wireguard_device *device, struct wireguard_peer *peer) {
 	// Send a NULL packet as a keep-alive
@@ -314,7 +350,7 @@ static void wireguardif_process_data_message(struct wireguard_device *device, st
 								ip_addr_copy_from_ip4(src_ip, iphdr->src);
 								for (x=0; x < WIREGUARD_MAX_SRC_IPS; x++) {
 									if (peer->allowed_source_ips[x].valid) {
-										if (ip_addr_netcmp(&src_ip, &peer->allowed_source_ips[x].ip, &peer->allowed_source_ips[x].mask)) {
+										if (wireguardif_addr_in_network(&src_ip, &peer->allowed_source_ips[x].ip, &peer->allowed_source_ips[x].mask)) {
 											src_ok = true;
 											header_len = PP_NTOHS(IPH_LEN(iphdr));
 											break;
@@ -928,7 +964,9 @@ err_t wireguardif_init(struct netif *netif) {
 							netif->state = device;
 							netif->name[0] = 'w';
 							netif->name[1] = 'g';
+#if LWIP_IPV4
 							netif->output = wireguardif_output;
+#endif /* LWIP_IPV4 */
 							netif->linkoutput = NULL;
 							netif->hwaddr_len = 0;
 							netif->mtu = WIREGUARDIF_MTU;
@@ -973,11 +1011,11 @@ void wireguardif_peer_init(struct wireguardif_peer *peer) {
 	memset(peer, 0, sizeof(struct wireguardif_peer));
 	// Caller must provide 'public_key'
 	peer->public_key = NULL;
-	ip4_addr_set_any(&peer->endpoint_ip);
+	ip_addr_set_any(false, &peer->endpoint_ip);
 	peer->endport_port = WIREGUARDIF_DEFAULT_PORT;
 	peer->keep_alive = WIREGUARDIF_KEEPALIVE_DEFAULT;
-	ip4_addr_set_any(&peer->allowed_ip);
-	ip4_addr_set_any(&peer->allowed_mask);
+	ip_addr_set_any(false, &peer->allowed_ip);
+	ip_addr_set_any(false, &peer->allowed_mask);
 	memset(peer->greatest_timestamp, 0, sizeof(peer->greatest_timestamp));
 	peer->preshared_key = NULL;
 }
