@@ -115,6 +115,14 @@ err_t wireguardif_init(struct netif *netif);
 // back to the socket. See wireguardif_transport_output_fn in wireguard.h.
 void wireguardif_set_transport_output(struct netif *netif, wireguardif_transport_output_fn output_fn, void *ctx);
 
+// Hand an encrypted WireGuard packet to the interface to be decrypted and passed
+// up to lwIP. This is the udp_recv callback the interface installs on its own
+// socket, and it ignores the pcb argument, so a caller supplying its own
+// transport can use it directly: pass netif->state as arg and NULL for the pcb.
+// The pbuf is consumed. lwIP's core must be locked, as it would be inside a
+// udp_recv callback.
+void wireguardif_network_rx(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_addr_t *addr, u16_t port);
+
 void wireguardif_peer_init(struct wireguardif_peer *peer);
 
 // Add a new peer to the specified interface - see wireguard.h for maximum number of peers allowed
